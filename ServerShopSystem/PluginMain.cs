@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 //using System.Drawing;
@@ -7,15 +7,16 @@ using Hooks;
 using TShockAPI;
 using TShockAPI.DB;
 using System.ComponentModel;
-using ServerPointSystem;
 using MySql.Data.MySqlClient;
 using System.IO;
 using System.Text;
+using Newtonsoft.Json;
+using Vault;
 
 
 namespace ServerShopSystem
 {
-    [APIVersion(1, 10)]
+    [APIVersion(1, 12)]
     public class ServerShopSystem : TerrariaPlugin
     {
         private static string ShopLogs = Path.Combine(TShock.SavePath, "ShopLogs");
@@ -40,7 +41,7 @@ namespace ServerShopSystem
         }
         public override string Description
         {
-            get { return ""; }
+            get { return "Vault version"; }
         }
         public override Version Version
         {
@@ -190,6 +191,7 @@ namespace ServerShopSystem
 
 
                     }
+
                 }
             }
             if (SQLEditor.ReadColumn("ServerShopCatalogue", "ID", new List<SqlValue>()).Count > 0)
@@ -218,7 +220,7 @@ namespace ServerShopSystem
                     if (!ShopList.Contains(shopname))
                         ShopList.Add(shopname);
                 }
-                for (int i = 0; i < ShopList.Count; i++ )
+                for (int i = 0; i < ShopList.Count; i++)
                 {
                     if (ShopList[i] == " ")
                         ShopList.RemoveAt(i);
@@ -265,7 +267,7 @@ namespace ServerShopSystem
             {
                 if (args.Player.IsLoggedIn)
                 {
-                    EPRPlayer player = ServerPointSystem.ServerPointSystem.GetEPRPlayerByIndex(args.Player.Index);
+                  //  EPRPlayer player = ServerPointSystem.ServerPointSystem.GetEPRPlayerByIndex(args.Player.Index);
                     cmd = args.Parameters[0].ToLower();
                     switch (cmd)
                     {
@@ -352,7 +354,7 @@ namespace ServerShopSystem
                                     while (k < 3 && (((page - 1) * 18) + i) < MasterList.Count)
                                     {
                                         int buyprice = (int)(MasterList[(((page - 1) * 18) + i)].Price * GetBuyRate(args.Player.Index));
-                                        sbline.Append(MasterList[(((page - 1) * 18) + i)].Name + " " + buyprice.ToString() + " " + ServerPointSystem.ServerPointSystem.currname + "(s), ");
+                                        sbline.Append(MasterList[(((page - 1) * 18) + i)].Name + " " + Vault.Vault.MoneyToString(buyprice) + ", ");
                                         i++;
                                         k++;
                                     }
@@ -408,7 +410,7 @@ namespace ServerShopSystem
                                             while (k < 3 && (((page - 1) * 18) + i) < ShopItems.Count)
                                             {
                                                 int buyprice = (int)(ShopItems[(((page - 1) * 18) + i)].Price * GetBuyRate(args.Player.Index));
-                                                sbline.Append(ShopItems[(((page - 1) * 18) + i)].Name + " " + buyprice + " " + ServerPointSystem.ServerPointSystem.currname + "(s), ");
+                                                sbline.Append(ShopItems[(((page - 1) * 18) + i)].Name + " " + Vault.Vault.MoneyToString(buyprice) + ", ");
                                                 i++;
                                                 k++;
                                             }
@@ -459,15 +461,15 @@ namespace ServerShopSystem
                                         {
                                             if (TShock.Regions.InAreaRegionName(args.Player.TileX, args.Player.TileY).Contains(ssibought.ShopName) && ssibought.ShopName != " ")
                                             {
-                                                args.Player.SendMessage("" + amount + " " + bought.name + " costs " + price * amount + " " + ServerPointSystem.ServerPointSystem.currname + "s and it can be bought here", Color.Yellow);
+                                                args.Player.SendMessage("" + amount + " " + bought.name + " costs " + Vault.Vault.MoneyToString(price * amount) + " and it can be bought here", Color.Yellow);
                                             }
                                             else if (!TShock.Regions.InAreaRegionName(args.Player.TileX, args.Player.TileY).Contains(ssibought.ShopName) && ssibought.ShopName != " ")
                                             {
-                                                args.Player.SendMessage("" + amount + " " + bought.name + " costs " + price * amount + " " + ServerPointSystem.ServerPointSystem.currname + "s and is sold at " + ssibought.ShopName + " ", Color.Yellow);
+                                                args.Player.SendMessage("" + amount + " " + bought.name + " costs " + Vault.Vault.MoneyToString(price * amount) + " and is sold at " + ssibought.ShopName + " ", Color.Yellow);
                                             }
                                             else if (ssibought.ShopName == " ")
                                             {
-                                                args.Player.SendMessage("" + amount + " " + bought.name + " costs " + price * amount + " " + ServerPointSystem.ServerPointSystem.currname + "s and it can be bought from anywhere", Color.Yellow);
+                                                args.Player.SendMessage("" + amount + " " + bought.name + " costs " + Vault.Vault.MoneyToString(price * amount) + " and it can be bought from anywhere", Color.Yellow);
                                             }
                                         }
                                         else if (ssibought.InStock && !SeeHidden)
@@ -478,7 +480,7 @@ namespace ServerShopSystem
                                         {
                                             args.Player.SendMessage("Item not for sale", Color.Red);
                                         }
-                                        
+
                                     }
                                     else if (TShockAPI.TShock.Utils.GetItemByIdOrName(args.Parameters[1].ToString()).Count > 1)
                                     {
@@ -524,44 +526,46 @@ namespace ServerShopSystem
                                             }
                                             ServerShopCatalogueItem ssibought = GetSSItemByID(bought.type);
                                             bool CheckPermission = ssibought.Permission != null ? true : args.Player.Group.HasPermission(ssibought.Permission);
-                                            int currbal = player.DisplayAccount;
+                                            int currbal = Vault.Vault.GetBalance(args.Player.Name);
                                             int price = (int)(ssibought.Price * GetBuyRate(args.Player.Index));
                                             if (ssibought.InStock && CheckPermission)
                                             {
                                                 if (TShock.Regions.InAreaRegionName(args.Player.TileX, args.Player.TileY).Contains(ssibought.ShopName) && ssibought.ShopName != " ")
                                                 {
-                                                    if (currbal >= (price * amount))
+                                                   // if (currbal >= (price * amount))
+                                                    if (Vault.Vault.ModifyBalance(args.Player.Name, -(price * amount)))
                                                     {
-                                                        args.Player.GiveItem(bought.type, bought.name, bought.width, bought.height, amount);
-                                                        ServerPointSystem.EPREvents.PointUse(player, price * amount, PointUsage.Shop);
-                                                        args.Player.SendMessage("Transaction complete! You have " + (player.DisplayAccount - price * amount).ToString() + " " + ServerPointSystem.ServerPointSystem.currname + "s left", Color.Green);
+                                                        args.Player.GiveItem(bought.type, bought.name, bought.width, bought.height, amount);                                                        
+                                                       // ServerPointSystem.EPREvents.PointUse(player, , PointUsage.Shop);
+                                                        args.Player.SendMessage("Transaction complete! You have " + Vault.Vault.MoneyToString(Vault.Vault.GetBalance(args.Player.Name)) + " left", Color.Green);
                                                         string[] PayLog = new string[1];
-                                                        PayLog[0] = DateTime.UtcNow.ToString() + " " + args.Player.Name + " bought " + amount + " " + bought.name + "(s) for " + price + ServerPointSystem.ServerPointSystem.currname + "s each";
+                                                        PayLog[0] = DateTime.UtcNow.ToString() + " " + args.Player.Name + " bought " + amount + " " + bought.name + "(s) for " + Vault.Vault.MoneyToString(price) + " each";
                                                         File.AppendAllLines(ShopLogSavePath, PayLog);
                                                     }
                                                     else
                                                     {
-                                                        args.Player.SendMessage("You don't have enough " + ServerPointSystem.ServerPointSystem.currname + "s!", Color.Red);
+                                                        args.Player.SendMessage("You don't have enough money", Color.Red);
                                                     }
                                                 }
                                                 else if (!TShock.Regions.InAreaRegionName(args.Player.TileX, args.Player.TileY).Contains(ssibought.ShopName) && ssibought.ShopName != " ")
                                                 {
-                                                    args.Player.SendMessage("" + amount + " " + bought.name + " costs " + price * amount + " " + ServerPointSystem.ServerPointSystem.currname + "s and is sold at " + ssibought.ShopName + " ", Color.Yellow);
+                                                    args.Player.SendMessage("" + amount + " " + bought.name + " costs " + Vault.Vault.MoneyToString(price * amount) + " and is sold at " + ssibought.ShopName + " ", Color.Yellow);
                                                 }
                                                 else if (ssibought.ShopName == " ")
                                                 {
-                                                    if (currbal >= (price * amount))
+                                                    //if (currbal >= (price * amount))
+                                                     if (Vault.Vault.ModifyBalance(args.Player.Name, -(price * amount)))                                                    
                                                     {
                                                         args.Player.GiveItem(bought.type, bought.name, bought.width, bought.height, amount);
-                                                        EPREvents.PointUse(player, price * amount, PointUsage.Shop);
-                                                        args.Player.SendMessage("Transaction complete! You have " + player.DisplayAccount + " " + ServerPointSystem.ServerPointSystem.currname + "s left", Color.Green);
+                                                       // EPREvents.PointUse(player, price * amount, PointUsage.Shop);
+                                                        args.Player.SendMessage("Transaction complete! You have " + Vault.Vault.MoneyToString(Vault.Vault.GetBalance(args.Player.Name)) + "s left", Color.Green);
                                                         string[] PayLog = new string[1];
-                                                        PayLog[0] = DateTime.UtcNow.ToString() + args.Player.Name + " bought " + amount + " " + bought.name + "(s) for " + price + ServerPointSystem.ServerPointSystem.currname + "s each";
+                                                        PayLog[0] = DateTime.UtcNow.ToString() + args.Player.Name + " bought " + amount + " " + bought.name + "(s) for " + Vault.Vault.MoneyToString(price) + " each";
                                                         File.AppendAllLines(ShopLogSavePath, PayLog);
                                                     }
                                                     else
                                                     {
-                                                        args.Player.SendMessage("You don't have enough " + ServerPointSystem.ServerPointSystem.currname + "s!", Color.Red);
+                                                        args.Player.SendMessage("You don't have enough money!", Color.Red);
                                                     }
                                                 }
 
@@ -659,19 +663,19 @@ namespace ServerShopSystem
                                     List<SqlValue> values = new List<SqlValue>();
                                     values.Add(new SqlValue("amount", "'" + finalbal + "'"));
                                     SQLEditor.UpdateValues("ServerPointAccounts", values, where);
-                                    args.Player.SendMessage("Transaction complete! You have " + finalbal + " " + ServerPointSystem.ServerPointSystem.currname + "s left", Color.Green);
+                                    args.Player.SendMessage("Transaction complete! You have " + finalbal + " left", Color.Green);
                                     string[] PayLog = new string[1];
-                                    PayLog[0] = DateTime.UtcNow.ToString() + args.Player.Name + " bought " + amount + " " + bought.name + "(s) for " + price + ServerPointSystem.ServerPointSystem.currname + "s each";
+                                    PayLog[0] = DateTime.UtcNow.ToString() + args.Player.Name + " bought " + amount + " " + bought.name + "(s) for " + Vault.Vault.MoneyToString(price) + " each";
                                     File.AppendAllLines(ShopLogSavePath, PayLog);
                                 }
                                 else
                                 {
-                                    args.Player.SendMessage("You don't have enough " + ServerPointSystem.ServerPointSystem.currname + "s!", Color.Red);
+                                    args.Player.SendMessage("You don't have enough money!", Color.Red);
                                 }
                             }
                             else if (!TShock.Regions.InAreaRegionName(args.Player.TileX, args.Player.TileY).Contains(ssibought.ShopName) && ssibought.ShopName != " ")
                             {
-                                args.Player.SendMessage("" + amount + " " + bought.name + " costs " + price * amount + " " + ServerPointSystem.ServerPointSystem.currname + "s and is sold at " + ssibought.ShopName + " ", Color.Yellow);
+                                args.Player.SendMessage("" + amount + " " + bought.name + " costs " + Vault.Vault.MoneyToString(price * amount) + " and is sold at " + ssibought.ShopName + " ", Color.Yellow);
                             }
                             else if (ssibought.ShopName == " ")
                             {
@@ -682,14 +686,14 @@ namespace ServerShopSystem
                                     List<SqlValue> values = new List<SqlValue>();
                                     values.Add(new SqlValue("amount", "'" + finalbal + "'"));
                                     SQLEditor.UpdateValues("ServerPointAccounts", values, where);
-                                    args.Player.SendMessage("Transaction complete! You have " + finalbal + " " + ServerPointSystem.ServerPointSystem.currname + "s left", Color.Green);
+                                    args.Player.SendMessage("Transaction complete! You have " + finalbal + " left", Color.Green);
                                     string[] PayLog = new string[1];
-                                    PayLog[0] = DateTime.UtcNow.ToString() + args.Player.Name + " bought " + amount + " " + bought.name + "(s) for " + price + ServerPointSystem.ServerPointSystem.currname + "s each";
+                                    PayLog[0] = DateTime.UtcNow.ToString() + args.Player.Name + " bought " + amount + " " + bought.name + "(s) for " + Vault.Vault.MoneyToString(price) + " each";
                                     File.AppendAllLines(ShopLogSavePath, PayLog);
                                 }
                                 else
                                 {
-                                    args.Player.SendMessage("You don't have enough " + ServerPointSystem.ServerPointSystem.currname + "s!", Color.Red);
+                                    args.Player.SendMessage("You don't have enough money!", Color.Red);
                                 }
                             }
 
@@ -753,7 +757,7 @@ namespace ServerShopSystem
             }
             else
             {
-                
+
                 args.Player.SendMessage("/buyrate [player] [buy rate -- multiplies the prices by this amount]", Color.Yellow);
                 args.Player.SendMessage("/buyrate [player] off", Color.Yellow);
             }
@@ -978,7 +982,7 @@ namespace ServerShopSystem
                                     if (item.ShopName == args.Parameters[1])
                                         item.ShopName = args.Parameters[2];
                                 }
-                                if(!ShopList.Contains(args.Parameters[2]))
+                                if (!ShopList.Contains(args.Parameters[2]))
                                     ShopList.Add(args.Parameters[2]);
                                 for (int i = 0; i < ShopList.Count; i++)
                                 {
@@ -1007,14 +1011,14 @@ namespace ServerShopSystem
                                     SQLEditor.UpdateValues("ServerShopCatalogue", list, where);
                                     bool flag1 = false;
                                     string oldshop = GetSSItemByID(TShockAPI.TShock.Utils.GetItemByIdOrName(args.Parameters[1])[0].type).ShopName;
-                                    
+
                                     GetSSItemByID(TShockAPI.TShock.Utils.GetItemByIdOrName(args.Parameters[1])[0].type).ShopName = " ";
                                     foreach (ServerShopCatalogueItem item in SSCatalogueInStock)
                                     {
                                         if (item.ShopName == oldshop)
                                             flag1 = true;
                                     }
-                                    if(!flag1)
+                                    if (!flag1)
                                     {
                                         for (int i = 0; i < ShopList.Count; i++)
                                         {
@@ -1042,14 +1046,14 @@ namespace ServerShopSystem
                                         where.Add(new SqlValue("ID", TShockAPI.TShock.Utils.GetItemByIdOrName(args.Parameters[1])[0].type));
                                         list.Add(new SqlValue("ShopName", "'" + args.Parameters[2] + "'"));
                                         SQLEditor.UpdateValues("ServerShopCatalogue", list, where);
-                                        bool flag1 =false;
+                                        bool flag1 = false;
                                         string oldshop = GetSSItemByID(TShockAPI.TShock.Utils.GetItemByIdOrName(args.Parameters[1])[0].type).ShopName;
                                         foreach (ServerShopCatalogueItem item in SSCatalogueInStock)
                                         {
                                             if (item.ShopName == oldshop)
                                                 flag1 = true;
                                         }
-                                        if(!flag1)
+                                        if (!flag1)
                                         {
                                             for (int i = 0; i < ShopList.Count; i++)
                                             {
@@ -1115,7 +1119,7 @@ namespace ServerShopSystem
                                 list.Add(new SqlValue("InStock", 1));
                                 SQLEditor.UpdateValues("ServerShopCatalogue", list, where);
                                 GetSSItemByID(TShockAPI.TShock.Utils.GetItemByIdOrName(args.Parameters[1])[0].type).InStock = true;
-                                if(!ShopList.Contains(GetSSItemByID(TShockAPI.TShock.Utils.GetItemByIdOrName(args.Parameters[1])[0].type).ShopName))
+                                if (!ShopList.Contains(GetSSItemByID(TShockAPI.TShock.Utils.GetItemByIdOrName(args.Parameters[1])[0].type).ShopName))
                                     ShopList.Add(GetSSItemByID(TShockAPI.TShock.Utils.GetItemByIdOrName(args.Parameters[1])[0].type).ShopName);
                                 TShockAPI.TShock.Utils.Broadcast("New Item In Stock: " + TShockAPI.TShock.Utils.GetItemByIdOrName(args.Parameters[1])[0].name + "!", Color.Yellow);
                             }
@@ -1140,21 +1144,21 @@ namespace ServerShopSystem
                                 SQLEditor.UpdateValues("ServerShopCatalogue", list, where);
                                 bool flag1 = false;
                                 string oldshop = GetSSItemByID(TShockAPI.TShock.Utils.GetItemByIdOrName(args.Parameters[1])[0].type).ShopName;
-                                    
-                                    GetSSItemByID(TShockAPI.TShock.Utils.GetItemByIdOrName(args.Parameters[1])[0].type).ShopName = " ";
-                                    foreach (ServerShopCatalogueItem item in SSCatalogueInStock)
+
+                                GetSSItemByID(TShockAPI.TShock.Utils.GetItemByIdOrName(args.Parameters[1])[0].type).ShopName = " ";
+                                foreach (ServerShopCatalogueItem item in SSCatalogueInStock)
+                                {
+                                    if (item.ShopName == oldshop)
+                                        flag1 = true;
+                                }
+                                if (!flag1)
+                                {
+                                    for (int i = 0; i < ShopList.Count; i++)
                                     {
-                                        if (item.ShopName == oldshop)
-                                            flag1 = true;
+                                        if (ShopList[i] == oldshop)
+                                            ShopList.RemoveAt(i);
                                     }
-                                    if(!flag1)
-                                    {
-                                        for (int i = 0; i < ShopList.Count; i++)
-                                        {
-                                            if (ShopList[i] == oldshop)
-                                                ShopList.RemoveAt(i);
-                                        }
-                                    }
+                                }
                                 TShockAPI.TShock.Utils.Broadcast("Item no longer for sale: " + TShockAPI.TShock.Utils.GetItemByIdOrName(args.Parameters[1])[0].name + "!", Color.Yellow);
                             }
                             else
@@ -1232,9 +1236,9 @@ namespace ServerShopSystem
         private static SSPlayer GetSSPlayerByID(int ID)
         {
             SSPlayer player = null;
-            foreach(SSPlayer playerctr in SSPlayers)
+            foreach (SSPlayer playerctr in SSPlayers)
             {
-                if(playerctr.Index == ID)
+                if (playerctr.Index == ID)
                 {
                     player = playerctr;
                     break;
@@ -1263,5 +1267,102 @@ namespace ServerShopSystem
             return BuyRate;
         }
 
+    }
+
+    public class SSConfigFile
+    {
+        public string[] BuyRatePermissions =
+        {
+            "superadmin",
+            "discount1",
+            "discount2",
+            "discount3"
+        };
+        public double[] BuyRates =
+        {
+            0,
+            0.75,
+            0.50,
+            0.25
+        };
+
+
+
+
+
+        public static SSConfigFile Read(string path)
+        {
+            if (!File.Exists(path))
+                return new SSConfigFile();
+            using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                return Read(fs);
+            }
+        }
+
+        public static SSConfigFile Read(Stream stream)
+        {
+            using (var sr = new StreamReader(stream))
+            {
+                var cf = JsonConvert.DeserializeObject<SSConfigFile>(sr.ReadToEnd());
+                if (ConfigRead != null)
+                    ConfigRead(cf);
+                return cf;
+            }
+        }
+
+        public void Write(string path)
+        {
+            using (var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Write))
+            {
+                Write(fs);
+            }
+        }
+
+        public void Write(Stream stream)
+        {
+            var str = JsonConvert.SerializeObject(this, Formatting.Indented);
+            using (var sw = new StreamWriter(stream))
+            {
+                sw.Write(str);
+            }
+        }
+
+        public static Action<SSConfigFile> ConfigRead;
+    }
+    class SSPlayer
+    {
+        public int Index { get; set; }
+        public TSPlayer Player { get { return TShock.Players[Index]; } }
+        public bool PBREnabled { get; set; }
+        public double PrivateBuyRate { get; set; }
+
+        public SSPlayer(int index)
+        {
+            Index = index;
+            PBREnabled = false;
+            PrivateBuyRate = 1;
+        }
+
+    }
+    public class ServerShopCatalogueItem
+    {
+        internal int ID { get; set; }
+        internal string Name { get; set; }
+        internal int Price { get; set; }
+        internal bool InStock { get; set; }
+        internal string ShopName { get; set; }
+        internal string Permission { get; set; }
+        internal bool Hidden { get; set; }
+        internal ServerShopCatalogueItem(int id, string name, int price, bool instock, string shopname, string permission = null, bool hidden = false)
+        {
+            ID = id;
+            Name = name;
+            Price = price;
+            InStock = instock;
+            ShopName = shopname;
+            Permission = permission;
+            Hidden = hidden;
+        }
     }
 }
